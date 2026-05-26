@@ -1,4 +1,4 @@
-module github.com/Securiteru/linear-cli
+module github.com/gluonfield/linear-cli
 
 go 1.25.0
 

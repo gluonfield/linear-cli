@@ -2,8 +2,8 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Securiteru/linear-cli?include_prereleases)](https://github.com/Securiteru/linear-cli/releases)
-[![Zero Dependencies](https://img.shields.io/badge/deps-zero-success)](https://github.com/Securiteru/linear-cli)
+[![Release](https://img.shields.io/github/v/release/gluonfield/linear-cli?include_prereleases)](https://github.com/gluonfield/linear-cli/releases)
+[![Zero Dependencies](https://img.shields.io/badge/deps-zero-success)](https://github.com/gluonfield/linear-cli)
 
 Linear issue tracking, from your terminal. One static binary, 35+ commands, zero runtime dependencies.
 
@@ -20,7 +20,7 @@ ENG-142 created
 ## Quick Start
 
 ```sh
-go install github.com/securiter/linear-cli@latest
+go install github.com/gluonfield/linear-cli@latest
 
 export LINEAR_API_KEY=lin_api_...
 
@@ -50,12 +50,12 @@ Generate an API key at **Linear > Settings > API > Personal API keys**.
 **Go install**
 
 ```sh
-go install github.com/securiter/linear-cli@latest
+go install github.com/gluonfield/linear-cli@latest
 ```
 
 **Pre-built binary**
 
-Download from [Releases](https://github.com/Securiteru/linear-cli/releases).
+Download from [Releases](https://github.com/gluonfield/linear-cli/releases).
 
 ## Usage
 
@@ -140,7 +140,7 @@ Returns only the issue identifier, no extra output.
 ## Development
 
 ```sh
-git clone https://github.com/Securiteru/linear-cli.git
+git clone https://github.com/gluonfield/linear-cli.git
 cd linear-cli
 go build -o linear .
 ./linear --help

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Securiteru/linear-cli/api"
+	"github.com/gluonfield/linear-cli/api"
 )
 
 var linearURLRe = regexp.MustCompile(`linear\.app/[^/]+/issue/([A-Za-z]+-\d+)`)

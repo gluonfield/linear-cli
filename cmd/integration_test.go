@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Securiteru/linear-cli/api"
+	"github.com/gluonfield/linear-cli/api"
 )
 
 func skipNoAPIKey(t *testing.T) {
