@@ -163,65 +163,98 @@ var oauthLoginCmd = &cobra.Command{
 		redirect := fmt.Sprintf("http://localhost:%d/callback", c.RedirectPort)
 		authURL := buildAuthURL(c.ClientID, redirect, scope, state)
 
-		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", c.RedirectPort))
-		if err != nil {
-			return fmt.Errorf("bind localhost:%d: %w (is the port free? matches your registered redirect URL?)", c.RedirectPort, err)
-		}
-
 		codeCh := make(chan string, 1)
 		errCh := make(chan error, 1)
-		mux := http.NewServeMux()
-		mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-			q := r.URL.Query()
-			if e := q.Get("error"); e != "" {
-				errCh <- fmt.Errorf("linear returned error: %s (%s)", e, q.Get("error_description"))
-				fmt.Fprintln(w, "Authorization failed. You can close this tab.")
-				return
-			}
-			if q.Get("state") != state {
-				errCh <- fmt.Errorf("state mismatch — possible CSRF")
-				fmt.Fprintln(w, "State mismatch. You can close this tab.")
-				return
-			}
-			code := q.Get("code")
-			if code == "" {
-				errCh <- fmt.Errorf("no code in callback")
-				return
-			}
-			fmt.Fprintln(w, "<h2>Authorized.</h2><p>You can close this tab and return to the terminal.</p>")
-			codeCh <- code
-		})
 
-		server := &http.Server{Handler: mux}
-		go server.Serve(listener)
-		defer server.Shutdown(context.Background())
+		// Try to bind the local callback listener. On headless / remote
+		// machines this may fail or be unreachable from the user's browser;
+		// we fall back to manual paste below either way.
+		listener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", c.RedirectPort))
+		var server *http.Server
+		if listenErr == nil {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query()
+				if e := q.Get("error"); e != "" {
+					errCh <- fmt.Errorf("linear returned error: %s (%s)", e, q.Get("error_description"))
+					fmt.Fprintln(w, "Authorization failed. You can close this tab.")
+					return
+				}
+				if q.Get("state") != state {
+					errCh <- fmt.Errorf("state mismatch — possible CSRF")
+					fmt.Fprintln(w, "State mismatch. You can close this tab.")
+					return
+				}
+				code := q.Get("code")
+				if code == "" {
+					errCh <- fmt.Errorf("no code in callback")
+					return
+				}
+				fmt.Fprintln(w, "<h2>Authorized.</h2><p>You can close this tab and return to the terminal.</p>")
+				codeCh <- code
+			})
+			server = &http.Server{Handler: mux}
+			go server.Serve(listener)
+			defer server.Shutdown(context.Background())
+		}
 
-		fmt.Printf("Opening browser to:\n  %s\n\nIf it doesn't open, paste that URL manually.\n", authURL)
-		_ = openBrowser(authURL)
+		fmt.Printf("Open this URL in your browser to authorize:\n\n  %s\n\n", authURL)
+		if listenErr != nil {
+			fmt.Printf("(could not bind localhost:%d locally: %v — manual paste only)\n\n", c.RedirectPort, listenErr)
+		} else {
+			_ = openBrowser(authURL)
+			fmt.Println("If you're on this machine, the browser will redirect back automatically.")
+		}
+		fmt.Println("If you're on a remote/headless machine, after approving:")
+		fmt.Println("  - your browser will land on a localhost URL that won't load — that's expected")
+		fmt.Println("  - copy the entire URL from the browser address bar and paste it here.")
+		fmt.Print("\nPaste callback URL (or press Enter to keep waiting): ")
 
-		select {
-		case code := <-codeCh:
-			tok, err := exchangeCode(c.ClientID, c.ClientSecret, redirect, code)
+		// Read manual paste from stdin in a goroutine so we can race it
+		// against the local listener.
+		go func() {
+			reader := bufio.NewReader(os.Stdin)
+			line, err := reader.ReadString('\n')
 			if err != nil {
-				return err
+				return
 			}
-			c.AccessToken = tok.AccessToken
-			c.TokenType = tok.TokenType
-			c.Scope = tok.Scope
-			if tok.ExpiresIn > 0 {
-				c.ExpiresAt = time.Now().Unix() + tok.ExpiresIn
+			line = strings.TrimSpace(line)
+			if line == "" {
+				return
 			}
-			if err := saveOAuthConfig(c); err != nil {
-				return err
+			code, perr := parseCodeFromCallback(line, state)
+			if perr != nil {
+				errCh <- perr
+				return
 			}
-			path, _ := oauthConfigPath()
-			fmt.Printf("Token saved to %s\nScopes: %s\n", path, c.Scope)
-			return nil
+			codeCh <- code
+		}()
+
+		var code string
+		select {
+		case code = <-codeCh:
 		case err := <-errCh:
 			return err
-		case <-time.After(5 * time.Minute):
-			return fmt.Errorf("timed out waiting for browser callback")
+		case <-time.After(10 * time.Minute):
+			return fmt.Errorf("timed out waiting for authorization")
 		}
+
+		tok, err := exchangeCode(c.ClientID, c.ClientSecret, redirect, code)
+		if err != nil {
+			return err
+		}
+		c.AccessToken = tok.AccessToken
+		c.TokenType = tok.TokenType
+		c.Scope = tok.Scope
+		if tok.ExpiresIn > 0 {
+			c.ExpiresAt = time.Now().Unix() + tok.ExpiresIn
+		}
+		if err := saveOAuthConfig(c); err != nil {
+			return err
+		}
+		path, _ := oauthConfigPath()
+		fmt.Printf("\nToken saved to %s\nScopes: %s\n", path, c.Scope)
+		return nil
 	},
 }
 
@@ -303,6 +336,40 @@ func randomState() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func parseCodeFromCallback(input, expectedState string) (string, error) {
+	// Accept either a full URL ("http://localhost:8765/callback?code=...&state=...")
+	// or just the query string ("code=...&state=...") or just the code.
+	var q url.Values
+	if strings.Contains(input, "?") {
+		u, err := url.Parse(input)
+		if err != nil {
+			return "", fmt.Errorf("parse pasted URL: %w", err)
+		}
+		q = u.Query()
+	} else if strings.Contains(input, "=") {
+		v, err := url.ParseQuery(input)
+		if err != nil {
+			return "", fmt.Errorf("parse pasted query string: %w", err)
+		}
+		q = v
+	} else {
+		// Bare code — no state to verify. Warn but accept.
+		fmt.Fprintln(os.Stderr, "warning: bare code pasted; state not verified")
+		return input, nil
+	}
+	if e := q.Get("error"); e != "" {
+		return "", fmt.Errorf("linear returned error: %s (%s)", e, q.Get("error_description"))
+	}
+	if got := q.Get("state"); got != "" && got != expectedState {
+		return "", fmt.Errorf("state mismatch — pasted URL is not from this login attempt")
+	}
+	code := q.Get("code")
+	if code == "" {
+		return "", fmt.Errorf("no 'code' parameter in pasted URL")
+	}
+	return code, nil
 }
 
 func buildAuthURL(clientID, redirect, scope, state string) string {

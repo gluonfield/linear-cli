@@ -131,6 +131,15 @@ linear oauth status           # verify
 linear oauth logout           # clear token locally
 ```
 
+**Running on a remote / headless machine?** `linear oauth login` works there too:
+
+1. Run it on the remote box.
+2. Copy the printed `https://linear.app/oauth/authorize?...` URL into a browser on your laptop.
+3. Approve. Your browser will land on a `http://localhost:8765/callback?...` URL that won't load — expected.
+4. Copy that whole callback URL from the address bar and paste it back into the CLI prompt.
+
+Alternative for SSH: `ssh -L 8765:localhost:8765 your-box`, then the browser-callback path works as-is.
+
 If `LINEAR_API_KEY` is set, it takes precedence over the stored OAuth token.
 
 ## Agentic Use
