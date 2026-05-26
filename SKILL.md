@@ -5,7 +5,7 @@ description: Read, create, update, comment on Linear issues from the shell. Use 
 
 # Linear CLI — Agent Usage
 
-Binary: `linear` (Go, single static binary). Auth: `LINEAR_API_KEY` env var.
+Binary: `linear` (Go, single static binary). Auth: either `LINEAR_API_KEY` env var, or OAuth (`linear oauth setup && linear oauth login` once; token cached at `~/.config/linear-cli/auth.json`). API key wins if both are set.
 
 ## Always pass `--json`
 

@@ -20,8 +20,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "ERR: %s\n", err.Error())
 		} else {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			if strings.Contains(err.Error(), "LINEAR_API_KEY") {
-				fmt.Fprintln(os.Stderr, "\nSet LINEAR_API_KEY env var or use: psst --global LINEAR_API_KEY -- linear ...")
+			if strings.Contains(err.Error(), "not authenticated") || strings.Contains(err.Error(), "LINEAR_API_KEY") {
+				fmt.Fprintln(os.Stderr, "\nOptions:")
+				fmt.Fprintln(os.Stderr, "  - export LINEAR_API_KEY=lin_api_...   (personal API key)")
+				fmt.Fprintln(os.Stderr, "  - linear oauth setup && linear oauth login   (OAuth flow)")
+				fmt.Fprintln(os.Stderr, "  - psst --global LINEAR_API_KEY -- linear ... (psst-managed key)")
 			}
 		}
 		os.Exit(1)
